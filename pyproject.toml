@@ -26,6 +26,9 @@ dependencies = [
 Homepage = "https://github.com/yourusername/superset-mcp"
 Issues = "https://github.com/yourusername/superset-mcp/issues"
 
+[project.scripts]
+superset-mcp = "main:main"
+
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"

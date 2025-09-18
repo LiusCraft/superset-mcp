@@ -1839,6 +1839,11 @@ async def superset_advanced_data_type_list(ctx: Context) -> Dict[str, Any]:
     return await make_api_request(ctx, "get", "/api/v1/advanced_data_type/types")
 
 
-if __name__ == "__main__":
+def main():
+    """Main entry point for the superset-mcp CLI."""
     logger.info("Starting Superset MCP server...")
     mcp.run()
+
+
+if __name__ == "__main__":
+    main()
