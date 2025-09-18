@@ -59,6 +59,7 @@ load_dotenv()
 SUPERSET_BASE_URL = os.getenv("SUPERSET_BASE_URL", "http://localhost:8088")
 SUPERSET_USERNAME = os.getenv("SUPERSET_USERNAME")
 SUPERSET_PASSWORD = os.getenv("SUPERSET_PASSWORD")
+SUPERSET_PROVIDER = os.getenv("SUPERSET_PROVIDER")
 ACCESS_TOKEN_STORE_PATH = os.path.join(os.path.dirname(__file__), ".superset_token")
 
 # Initialize FastAPI app for handling additional web endpoints if needed
@@ -416,6 +417,7 @@ async def superset_auth_authenticate_user(
     ctx: Context,
     username: Optional[str] = None,
     password: Optional[str] = None,
+    provider: Optional[str] = None,
     refresh: bool = True,
 ) -> Dict[str, Any]:
     """
@@ -428,6 +430,7 @@ async def superset_auth_authenticate_user(
     Args:
         username: Superset username (falls back to environment variable if not provided)
         password: Superset password (falls back to environment variable if not provided)
+        provider: Superset provider (falls back to environment variable if not provided)
         refresh: Whether to refresh the token if invalid (defaults to True)
 
     Returns:
@@ -455,10 +458,14 @@ async def superset_auth_authenticate_user(
     # Use provided credentials or fall back to env vars
     username = username or SUPERSET_USERNAME
     password = password or SUPERSET_PASSWORD
+    provider = provider or SUPERSET_PROVIDER
+
+    if provider == "":
+        provider = "db"
 
     if not username or not password:
         return {
-            "error": "Username and password must be provided either as arguments or set in environment variables"
+            "error": "Username, password must be provided either as arguments or set in environment variables"
         }
 
     try:
@@ -468,7 +475,7 @@ async def superset_auth_authenticate_user(
             json={
                 "username": username,
                 "password": password,
-                "provider": "db",
+                "provider": provider,
                 "refresh": refresh,
             },
         )
