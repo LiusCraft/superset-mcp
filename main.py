@@ -10,6 +10,7 @@ from typing import (
     Union,
 )
 import os
+import argparse
 import httpx
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -116,9 +117,12 @@ async def superset_lifespan(server: FastMCP) -> AsyncIterator[SupersetContext]:
         client.headers.update({"Authorization": f"Bearer {stored_token}"})
         logger.info("Using stored access token")
 
-        # Verify token validity
+        # Verify token validity.
+        # NOTE: /api/v1/me/ returns 401 for some auth providers (e.g. LDAP) on
+        # certain Superset deployments, which would wrongly invalidate a stored
+        # token. Use a stable read-only endpoint instead.
         try:
-            response = await client.get("/api/v1/me/")
+            response = await client.get("/api/v1/log/recent_activity/")
             if response.status_code != 200:
                 logger.info(
                     f"Stored token is invalid (status {response.status_code}). Will need to re-authenticate."
@@ -1846,9 +1850,44 @@ async def superset_advanced_data_type_list(ctx: Context) -> Dict[str, Any]:
     return await make_api_request(ctx, "get", "/api/v1/advanced_data_type/types")
 
 
+def run_http(host: str, port: int) -> None:
+    """Run the MCP server with streamable HTTP transport."""
+    logger.info(f"Starting Superset MCP server over Streamable HTTP on {host}:{port}/mcp ...")
+    try:
+        app = mcp.streamable_http_app()
+        uvicorn.run(app, host=host, port=port)
+    except Exception as e:
+        logger.error(f"Failed to start HTTP server: {e}")
+        raise SystemExit(1)
+
+
 def main():
     """Main entry point for the superset-mcp CLI."""
-    logger.info("Starting Superset MCP server...")
+    parser = argparse.ArgumentParser(description="Superset MCP server")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "streamable-http"],
+        default="stdio",
+        help="MCP transport to use (default: stdio)",
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host to bind for streamable-http (default: 127.0.0.1)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port to bind for streamable-http (default: 8000)",
+    )
+    args = parser.parse_args()
+
+    if args.transport == "streamable-http":
+        run_http(args.host, args.port)
+        return
+
+    logger.info("Starting Superset MCP server (stdio)...")
     mcp.run()
 
 

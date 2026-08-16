@@ -54,6 +54,39 @@ npx -y @smithery/cli install @aptro/superset-mcp --client claude
    mcp install main.py
    ```
 
+## HTTP Mode (Streamable HTTP)
+
+The server supports the Streamable HTTP transport for remote deployment, in
+addition to the default stdio transport.
+
+```bash
+superset-mcp --transport streamable-http --host 0.0.0.0 --port 8000
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--transport` | `stdio` or `streamable-http` | `stdio` |
+| `--host` | Host to bind for streamable-http | `127.0.0.1` |
+| `--port` | Port to bind for streamable-http | `8000` |
+
+The endpoint is served at `http://<host>:<port>/mcp`. Authentication is
+handled through the MCP `superset_auth_authenticate_user` tool; no HTTP-layer
+auth is added, so secure the endpoint appropriately (e.g. behind a reverse
+proxy) when exposing it remotely.
+
+Example client config (opencode):
+
+```json
+{
+  "mcp": {
+    "superset-http": {
+      "type": "remote",
+      "url": "http://127.0.0.1:8000/mcp"
+    }
+  }
+}
+```
+
 ## Usage with Claude
 
 After setup, you can interact with your Superset instance via Claude using natural language requests. Here are some examples:
