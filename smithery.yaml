@@ -16,6 +16,11 @@ startCommand:
       supersetPassword:
         type: string
         description: Password for Superset authentication.
+      supersetProvider:
+        type: string
+        enum: [db, ldap]
+        default: db
+        description: Authentication provider used by Superset.
   commandFunction:
     # A JS function that produces the CLI command based on the given config to start the MCP on stdio.
     |-
@@ -25,10 +30,12 @@ startCommand:
       env: {
         SUPERSET_BASE_URL: config.supersetBaseUrl,
         SUPERSET_USERNAME: config.supersetUsername || '',
-        SUPERSET_PASSWORD: config.supersetPassword || ''
+        SUPERSET_PASSWORD: config.supersetPassword || '',
+        SUPERSET_PROVIDER: config.supersetProvider || 'db'
       }
     })
   exampleConfig:
     supersetBaseUrl: http://localhost:8088
     supersetUsername: admin
     supersetPassword: admin
+    supersetProvider: db

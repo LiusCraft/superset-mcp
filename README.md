@@ -39,7 +39,11 @@ npx -y @smithery/cli install @aptro/superset-mcp --client claude
    SUPERSET_BASE_URL=http://localhost:8088  # Change to your Superset URL
    SUPERSET_USERNAME=your_username
    SUPERSET_PASSWORD=your_password
+   SUPERSET_PROVIDER=db  # Use ldap for LDAP authentication
    ```
+
+   When both username and password are configured, the server authenticates
+   automatically at startup if it cannot restore a valid saved token.
 
 4. **Install Dependencies**
 
@@ -244,6 +248,7 @@ This plugin offers the following MCP tools that Claude can use:
 | SUPERSET_BASE_URL | URL of your Superset instance | http://localhost:8088 |
 | SUPERSET_USERNAME | Username for Superset | None |
 | SUPERSET_PASSWORD | Password for Superset | None |
+| SUPERSET_PROVIDER | Authentication provider (`db` or `ldap`) | db |
 
 ## Troubleshooting
 

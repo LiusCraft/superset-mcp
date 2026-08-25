@@ -16,6 +16,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import wraps
 import inspect
+from pathlib import Path
 from threading import Thread
 import webbrowser
 import uvicorn
@@ -53,14 +54,16 @@ It includes tools for:
 Each tool follows a consistent naming convention: superset_<category>_<action>
 """
 
-# Load environment variables from .env file
-load_dotenv()
+# Load configuration from the launch directory when installed as a CLI, while
+# preserving support for a .env file next to main.py when run from source.
+for env_path in (Path.cwd() / ".env", Path(__file__).resolve().parent / ".env"):
+    load_dotenv(dotenv_path=env_path)
 
 # Constants
 SUPERSET_BASE_URL = os.getenv("SUPERSET_BASE_URL", "http://localhost:8088")
 SUPERSET_USERNAME = os.getenv("SUPERSET_USERNAME")
 SUPERSET_PASSWORD = os.getenv("SUPERSET_PASSWORD")
-SUPERSET_PROVIDER = os.getenv("SUPERSET_PROVIDER")
+SUPERSET_PROVIDER = os.getenv("SUPERSET_PROVIDER") or "db"
 ACCESS_TOKEN_STORE_PATH = os.path.join(os.path.dirname(__file__), ".superset_token")
 
 # Initialize FastAPI app for handling additional web endpoints if needed
@@ -98,6 +101,47 @@ def save_access_token(token: str):
         logger.warning(f"Warning: Could not save access token: {e}")
 
 
+async def authenticate_with_credentials(
+    superset_ctx: SupersetContext,
+    username: str,
+    password: str,
+    provider: str = "db",
+    refresh: bool = True,
+) -> Dict[str, Any]:
+    """Authenticate a context and persist the returned access token."""
+    try:
+        response = await superset_ctx.client.post(
+            "/api/v1/security/login",
+            json={
+                "username": username,
+                "password": password,
+                "provider": provider or "db",
+                "refresh": refresh,
+            },
+        )
+
+        if response.status_code != 200:
+            return {
+                "error": f"Failed to get access token: {response.status_code} - {response.text}"
+            }
+
+        access_token = response.json().get("access_token")
+        if not access_token:
+            return {"error": "No access token returned"}
+
+        save_access_token(access_token)
+        superset_ctx.access_token = access_token
+        superset_ctx.client.headers.update(
+            {"Authorization": f"Bearer {access_token}"}
+        )
+        return {
+            "message": "Successfully authenticated with Superset",
+            "access_token": access_token,
+        }
+    except Exception as e:
+        return {"error": f"Authentication error: {str(e)}"}
+
+
 @asynccontextmanager
 async def superset_lifespan(server: FastMCP) -> AsyncIterator[SupersetContext]:
     """Manage application lifecycle for Superset integration"""
@@ -133,6 +177,19 @@ async def superset_lifespan(server: FastMCP) -> AsyncIterator[SupersetContext]:
             logger.info(f"Error verifying stored token: {e}")
             ctx.access_token = None
             client.headers.pop("Authorization", None)
+
+    if not ctx.access_token and SUPERSET_USERNAME and SUPERSET_PASSWORD:
+        logger.info("Authenticating to Superset with configured credentials...")
+        auth_result = await authenticate_with_credentials(
+            ctx,
+            SUPERSET_USERNAME,
+            SUPERSET_PASSWORD,
+            SUPERSET_PROVIDER,
+        )
+        if auth_result.get("error"):
+            logger.warning(f"Automatic authentication failed: {auth_result['error']}")
+        else:
+            logger.info("Successfully authenticated to Superset")
 
     try:
         yield ctx
@@ -462,54 +519,19 @@ async def superset_auth_authenticate_user(
     # Use provided credentials or fall back to env vars
     username = username or SUPERSET_USERNAME
     password = password or SUPERSET_PASSWORD
-    provider = provider or SUPERSET_PROVIDER
-
-    if provider == "":
-        provider = "db"
+    provider = provider or SUPERSET_PROVIDER or "db"
 
     if not username or not password:
         return {
             "error": "Username, password must be provided either as arguments or set in environment variables"
         }
 
-    try:
-        # Get access token directly using the security login API endpoint
-        response = await superset_ctx.client.post(
-            "/api/v1/security/login",
-            json={
-                "username": username,
-                "password": password,
-                "provider": provider,
-                "refresh": refresh,
-            },
-        )
-
-        if response.status_code != 200:
-            return {
-                "error": f"Failed to get access token: {response.status_code} - {response.text}"
-            }
-
-        data = response.json()
-        access_token = data.get("access_token")
-
-        if not access_token:
-            return {"error": "No access token returned"}
-
-        # Save and set the access token
-        save_access_token(access_token)
-        superset_ctx.access_token = access_token
-        superset_ctx.client.headers.update({"Authorization": f"Bearer {access_token}"})
-
-        # Get CSRF token after successful authentication
+    auth_result = await authenticate_with_credentials(
+        superset_ctx, username, password, provider, refresh
+    )
+    if not auth_result.get("error"):
         await get_csrf_token(ctx)
-
-        return {
-            "message": "Successfully authenticated with Superset",
-            "access_token": access_token,
-        }
-
-    except Exception as e:
-        return {"error": f"Authentication error: {str(e)}"}
+    return auth_result
 
 
 # ===== Dashboard Tools =====
